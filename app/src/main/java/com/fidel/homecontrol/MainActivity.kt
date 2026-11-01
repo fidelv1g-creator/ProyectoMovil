@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -77,7 +78,8 @@ private fun HomeScreen(
     var ip by remember { mutableStateOf(initialIp) }
     var mac by remember { mutableStateOf(initialMac) }
     var isPaired by remember { mutableStateOf(paired) }
-    var status by remember { mutableStateOf("Configura tu televisor LG para empezar") }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("Televisor preparado para controlar") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -100,10 +102,17 @@ private fun HomeScreen(
     Surface(Modifier.fillMaxSize(), color = Background) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text("HOME CONTROL", color = Color.White, fontSize = 23.sp)
-            Text("Control local de tus dispositivos", color = Muted, fontSize = 14.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("HOME CONTROL", color = Color.White, fontSize = 23.sp)
+                    Text("Control local de tus dispositivos", color = Muted, fontSize = 14.sp)
+                }
+                IconButton(onClick = { settingsOpen = true }, enabled = !busy) {
+                    Icon(Icons.Default.Settings, contentDescription = "Ajustes", tint = Accent)
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Tv, contentDescription = null, tint = Accent)
                 Spacer(Modifier.width(10.dp))
@@ -111,40 +120,73 @@ private fun HomeScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 DeviceButton(Modifier.weight(1f), "ENCENDER\nTELE", "Wake-on-LAN", !busy) {
-                    runAction({ onSave(ip, mac); onPowerOn(mac) }, "Orden de encendido enviada")
+                    runAction({ onPowerOn(mac) }, "Orden de encendido enviada")
                 }
                 DeviceButton(Modifier.weight(1f), "APAGAR\nTELE", "webOS", !busy) {
-                    runAction({ onSave(ip, mac); onPowerOff(ip) }, "Orden de apagado enviada")
+                    runAction({ onPowerOff(ip) }, "Orden de apagado enviada")
                 }
             }
-            Text("CONFIGURACIÓN DEL TELEVISOR", color = Accent, fontSize = 12.sp)
-            OutlinedTextField(
-                value = ip, onValueChange = { ip = it },
-                label = { Text("Dirección IP del televisor") },
-                placeholder = { Text("Ej. 192.168.1.50") },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = mac, onValueChange = { mac = it },
-                label = { Text("Dirección MAC (para encender)") },
-                placeholder = { Text("Ej. AA:BB:CC:DD:EE:FF") },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            Button(
-                onClick = {
-                    onSave(ip, mac)
-                    runAction({ onPair(ip); isPaired = true }, "Televisor vinculado. Acepta la solicitud en la pantalla de la TV si aparece.")
-                },
-                enabled = !busy && ip.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (isPaired) "VOLVER A VINCULAR TV" else "VINCULAR TELEVISOR") }
-            Text(if (isPaired) "Conexión webOS autorizada en este móvil" else "Aún no se ha autorizado la conexión webOS", color = Muted, fontSize = 12.sp)
-            Text(status, color = if (status.startsWith("Error")) Color(0xFFFF8A80) else Muted, fontSize = 12.sp)
             Text(
-                "Nota: el encendido requiere que el televisor admita Wake-on-LAN y que esté activado el inicio por red. La orden enviada no confirma por sí sola que la TV haya arrancado.",
-                color = Muted, fontSize = 11.sp, lineHeight = 15.sp
+                if (isPaired) "Televisor vinculado y listo" else "Configura y vincula tu televisor desde Ajustes",
+                color = Muted, fontSize = 12.sp
             )
+            Text(status, color = if (status.startsWith("Error")) Color(0xFFFF8A80) else Muted, fontSize = 12.sp)
         }
+    }
+
+    if (settingsOpen) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) settingsOpen = false },
+            containerColor = Surface,
+            title = { Text("Ajustes del televisor", color = Color.White) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("La IP y la MAC se guardan aquí y no aparecen en la pantalla principal.", color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = ip, onValueChange = { ip = it },
+                        label = { Text("Dirección IP") },
+                        placeholder = { Text("192.168.0.13") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    OutlinedTextField(
+                        value = mac, onValueChange = { mac = it },
+                        label = { Text("Dirección MAC") },
+                        placeholder = { Text("AA:BB:CC:DD:EE:FF") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        if (isPaired) "Vinculación webOS autorizada en este móvil" else "El televisor aún no está vinculado",
+                        color = Muted, fontSize = 12.sp
+                    )
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)
+                }
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = {
+                            onSave(ip, mac)
+                            runAction({ onPair(ip); isPaired = true }, "Televisor vinculado correctamente")
+                        },
+                        enabled = !busy && ip.isNotBlank() && mac.isNotBlank()
+                    ) { Text("VOLVER A VINCULAR", color = Accent) }
+                    TextButton(
+                        onClick = {
+                            onSave(ip, mac)
+                            settingsOpen = false
+                            status = "Configuración guardada"
+                        },
+                        enabled = !busy && ip.isNotBlank() && mac.isNotBlank()
+                    ) { Text("GUARDAR", color = Accent) }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { settingsOpen = false }, enabled = !busy) {
+                    Text("CERRAR", color = Muted)
+                }
+            }
+        )
     }
 }
 
