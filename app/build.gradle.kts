@@ -4,6 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val signingStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val signingKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val signingKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasPermanentSigning = !signingStorePassword.isNullOrBlank() &&
+    !signingKeyAlias.isNullOrBlank() &&
+    !signingKeyPassword.isNullOrBlank() &&
+    file("homecontrol-signing.jks").exists()
+
 android {
     namespace = "com.fidel.homecontrol"
     compileSdk = 35
@@ -12,8 +20,27 @@ android {
         applicationId = "com.fidel.homecontrol.test"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        if (hasPermanentSigning) {
+            create("permanent") {
+                storeFile = file("homecontrol-signing.jks")
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (hasPermanentSigning) {
+                signingConfig = signingConfigs.getByName("permanent")
+            }
+        }
     }
 
     compileOptions {
