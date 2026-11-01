@@ -182,7 +182,7 @@ private object WebOsTv {
     }
 
     suspend fun command(ip: String, key: String, uri: String) {
-        websocket(ip, key, register = false, uri = uri)
+        withTimeout(15_000) { websocket(ip, key, register = false, uri = uri) }
     }
 
     private suspend fun websocket(ip: String, key: String?, register: Boolean, uri: String?): String =
@@ -220,8 +220,13 @@ private object WebOsTv {
                         JSONObject().put("type", "request").put("id", "home-control-power")
                             .put("uri", uri).put("payload", JSONObject()).toString()
                     }
-                    if (!register && !key.isNullOrBlank()) {
-                        // Client key is sent in the registration handshake on the same socket.
+                    if (register) {
+                        webSocket.send(payload)
+                    } else {
+                        if (key.isNullOrBlank()) {
+                            fail("Primero debes vincular el televisor")
+                            return
+                        }
                         webSocket.send(JSONObject().put("type", "register").put("payload",
                             JSONObject().put("client-key", key).put("manifest", JSONObject()
                                 .put("manifestVersion", 1).put("appVersion", "1.0")
@@ -229,18 +234,20 @@ private object WebOsTv {
                                 .put("permissions", org.json.JSONArray(listOf("CONTROL_POWER")))
                             )).toString())
                     }
-                    if (register) webSocket.send(payload) else webSocket.send(payload)
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     try {
                         val json = JSONObject(text)
                         val clientKey = json.optJSONObject("payload")?.optString("client-key")
-                        if (register && !clientKey.isNullOrBlank()) {
+                        if (!register && json.optString("type") == "registered") {
+                            webSocket.send(JSONObject().put("type", "request").put("id", "home-control-power")
+                                .put("uri", uri).put("payload", JSONObject()).toString())
+                        } else if (register && !clientKey.isNullOrBlank()) {
                             finished = true
                             if (continuation.isActive) continuation.resume(clientKey)
                             webSocket.close(1000, "paired")
-                        } else if (!register && (json.optString("type") == "response" || json.optString("type") == "response")) {
+                        } else if (!register && json.optString("type") == "response") {
                             if (json.optBoolean("returnValue", false)) {
                                 finished = true
                                 if (continuation.isActive) continuation.resume(key ?: "")
